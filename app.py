@@ -1,32 +1,30 @@
-import http.server
-import socketserver
+import streamlit as st
 import os
-from urllib.parse import urlparse
 
-PORT = 5000
+st.set_page_config(page_title="ONNON", layout="wide")
 
-class MyHandler(http.server.SimpleHTTPRequestHandler):
-    def do_GET(self):
-        # 기본 경로를 public 폴더로 설정
-        self.path = '/public' + self.path if not self.path.startswith('/public') else self.path
-        
-        # index.html, login.html 등 직접 접근
-        if self.path == '/':
-            self.path = '/public/index.html'
-        elif self.path == '/login.html':
-            self.path = '/public/login.html'
-        elif self.path == '/admin.html':
-            self.path = '/public/admin.html'
-        elif self.path == '/solve.html':
-            self.path = '/public/solve.html'
-        elif self.path == '/account.html':
-            self.path = '/public/account.html'
-        
-        return super().do_GET()
+# 사이드바에 페이지 선택
+page = st.sidebar.radio("페이지 선택", ["홈", "로그인", "관리자", "문제풀기", "계정"])
 
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+def load_html(filename):
+    filepath = os.path.join('public', filename)
+    if os.path.exists(filepath):
+        with open(filepath, 'r', encoding='utf-8') as f:
+            return f.read()
+    return None
 
-with socketserver.TCPServer(("", PORT), MyHandler) as httpd:
-    print(f"서버 시작: http://localhost:{PORT}")
-    print("종료하려면 Ctrl+C 누르세요")
-    httpd.serve_forever()
+if page == "홈":
+    html_content = load_html('index.html')
+elif page == "로그인":
+    html_content = load_html('login.html')
+elif page == "관리자":
+    html_content = load_html('admin.html')
+elif page == "문제풀기":
+    html_content = load_html('solve.html')
+elif page == "계정":
+    html_content = load_html('account.html')
+
+if html_content:
+    st.components.v1.html(html_content, height=1000, scrolling=True)
+else:
+    st.error("페이지를 찾을 수 없습니다")
