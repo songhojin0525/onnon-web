@@ -79,3 +79,6 @@ create policy "submissions_select_own"
   on public.submissions for select
   to authenticated
   using (auth.uid() = user_id);
+
+
+
