@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#EEF1F8">
+<title>ONNON - 관리자</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;700&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+  <main class="auth-wrap">
+    <h1 style="font-size:32px;">관리자</h1>
+    <p class="lede">오늘의 문제 3개를 지금 바로 새로 만듭니다. 이미 문제가 있어도 덮어씁니다. 새로 생성하는 동안 30초~1분 정도 걸릴 수 있어요.</p>
+
+    <p class="field-label">관리자 비밀번호</p>
+    <input class="text-input" id="pwInput" type="password" placeholder="비밀번호">
+
+    <p class="auth-msg" id="msg"></p>
+
+    <button class="primary-btn" id="goBtn">오늘 문제 다시 만들기</button>
+    <button class="secondary-btn" id="backBtn">목록으로</button>
+  </main>
+</div>
+<script>
+document.getElementById('backBtn').onclick = () => { location.href = 'index.html'; };
+document.getElementById('goBtn').onclick = async () => {
+  const password = document.getElementById('pwInput').value;
+  const msg = document.getElementById('msg');
+  const btn = document.getElementById('goBtn');
+  if(!password){ msg.textContent = '비밀번호를 입력해 주세요.'; return; }
+  btn.disabled = true;
+  msg.style.color = 'var(--ink-light)';
+  msg.textContent = '문제를 만드는 중이에요...';
+  try{
+    const res = await fetch('/api/admin-regenerate', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ password })
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || '실패했어요.');
+    msg.style.color = 'var(--accent)';
+    msg.textContent = `완료! ${data.dateStr} 문제 ${data.count}개가 새로 저장됐어요.`;
+  }catch(e){
+    msg.style.color = 'var(--warn)';
+    msg.textContent = e.message || '오류가 발생했어요.';
+  }finally{
+    btn.disabled = false;
+  }
+};
+</script>
+</body>
+</html>

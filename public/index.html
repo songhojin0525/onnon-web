@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#EEF1F8">
+<title>ONNON</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;700&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page" id="page"><main class="loading"><div class="spinner"></div>불러오는 중...</main></div>
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script>
+const pageEl = document.getElementById('page');
+
+async function ensureProfile(session){
+  try{
+    const rows = await sbSelect('profiles', `id=eq.${session.user.id}&select=*`, session.access_token);
+    if(rows.length) return rows[0];
+  }catch(e){}
+  return sbUpsertOwn('profiles', { id: session.user.id, nickname:'', joined: localDateStrKST() }, session.access_token);
+}
+
+async function main(){
+  const session = await requireAuth();
+  if(!session) return;
+
+  const today = localDateStrKST();
+  const [profile, problems, todaySubs, history] = await Promise.all([
+    ensureProfile(session),
+    sbSelect('problems', `problem_date=eq.${today}&select=*&order=created_at.asc`, session.access_token),
+    sbSelect('submissions', `user_id=eq.${session.user.id}&problem_date=eq.${today}&select=problem_id`, session.access_token),
+    sbSelect('submissions', `user_id=eq.${session.user.id}&select=*&order=created_at.desc&limit=10`, session.access_token),
+  ]);
+
+  const solvedIds = new Set(todaySubs.map(s=>s.problem_id));
+  const quote = pickDailyQuote(today);
+  let dday = null;
+  try{
+    const p = await sbSelect('profiles', `id=eq.${session.user.id}&select=dday_label,dday_date`, session.access_token);
+    if(p[0] && p[0].dday_date) dday = { label:p[0].dday_label, date:p[0].dday_date };
+  }catch(e){}
+
+  const items = problems.length === 0
+    ? `<p class="hist-empty">오늘 문제가 아직 준비되지 않았어요. 잠시 후 다시 확인해 주세요.</p>`
+    : problems.map((p,i)=>`
+      <li>
+        <button class="prob-item${solvedIds.has(p.id) ? ' solved' : ''}" data-id="${p.id}">
+          <span class="prob-tab">0${i+1}</span>
+          <span class="prob-body">
+            <span class="prob-skill">${escapeHtml(p.skill_label)}</span><br>
+            <span class="prob-topic">${escapeHtml(p.topic)}</span>
+          </span>
+          <span class="prob-meta">
+            <span class="prob-time">${p.skill_time}분</span>
+            ${solvedIds.has(p.id) ? `<span class="prob-check">✓</span>` : `<span class="prob-arrow">→</span>`}
+          </span>
+        </button>
+      </li>`).join('');
+
+  const histRows = history.length === 0
+    ? `<div class="hist-empty">아직 채점 기록이 없어요.</div>`
+    : history.map(h=>`
+      <div class="hist-row">
+        <span class="hist-date">${escapeHtml(String(h.problem_date).slice(5))}</span>
+        <span class="hist-skill">${escapeHtml(h.skill_label)}</span>
+        <span class="hist-topic">${escapeHtml(h.topic)}</span>
+        <span class="hist-score">${h.score}/5</span>
+      </div>`).join('');
+
+  pageEl.innerHTML = `
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="topbar-date">${friendlyDate(new Date())}</span>
+        ${dday ? `<span class="topbar-dday">${escapeHtml(dday.label)} ${computeDdayLabel(dday.date)}</span>` : ''}
+      </div>
+      <div class="topbar-actions">
+        <button class="icon-btn avatar-btn" id="accountBtn" title="내 기록">${profile.nickname ? escapeHtml(profile.nickname[0]) : personIconSvg()}</button>
+      </div>
+    </header>
+    <main>
+      ${profile.nickname ? `<p class="greeting">${escapeHtml(profile.nickname)}님, 오늘의 훈련을 시작해볼까요</p>` : ''}
+      <h1>ONNON</h1>
+      <p class="lede">오늘의 논술 - 오논</p>
+      <div class="quote-block">
+        <p class="quote-text">${escapeHtml(quote.text)}<span class="quote-author">— ${escapeHtml(quote.author)}</span></p>
+      </div>
+      <ul class="prob-list">${items}</ul>
+      <details class="history">
+        <summary>지난 채점 기록</summary>
+        ${histRows}
+      </details>
+    </main>`;
+
+  pageEl.querySelectorAll('.prob-item').forEach(btn=>{
+    btn.onclick = () => { location.href = `solve.html?id=${btn.dataset.id}`; };
+  });
+  document.getElementById('accountBtn').onclick = () => { location.href = 'account.html'; };
+}
+
+main().catch(e=>{
+  console.error(e);
+  pageEl.innerHTML = `<main class="error-box"><p>문제를 불러오는 중 오류가 발생했어요.<br>${escapeHtml(e.message||'')}</p>
+    <button class="primary-btn" onclick="location.reload()">다시 시도</button></main>`;
+});
+</script>
+</body>
+</html>

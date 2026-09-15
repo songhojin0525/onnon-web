@@ -1,0 +1,9 @@
+{
+  "name": "onnon-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "오논(ONNON) - 매일 3문제 인문논술 훈련 서비스",
+  "engines": {
+    "node": ">=18"
+  }
+}

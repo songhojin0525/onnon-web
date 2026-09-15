@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#EEF1F8">
+<title>ONNON</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;700&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page" id="page"><main class="loading"><div class="spinner"></div>불러오는 중...</main></div>
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script>
+const pageEl = document.getElementById('page');
+let session, problem, timerId, remainingSec;
+
+function renderChart(chart){
+  if(!chart) return '';
+  const allValues = chart.series.flatMap(s=>s.values||[]);
+  const max = Math.max(...allValues, 1);
+  const rows = chart.categories.map((cat,i)=>{
+    const bars = chart.series.map(s=>{
+      const v = (s.values||[])[i] ?? 0;
+      const pct = Math.round((v/max)*100);
+      return `<div class="chart-bar-row">
+        <span class="chart-bar-series">${escapeHtml(s.name)}</span>
+        <div class="chart-bar-track"><div class="chart-bar-fill" style="width:${pct}%"></div></div>
+        <span class="chart-bar-value">${escapeHtml(v)}${escapeHtml(chart.unit||'')}</span>
+      </div>`;
+    }).join('');
+    return `<div class="chart-cat"><div class="chart-cat-label">${escapeHtml(cat)}</div>${bars}</div>`;
+  }).join('');
+  return `<div class="chart-block"><div class="chart-title">${escapeHtml(chart.title)}</div>${rows}</div>`;
+}
+
+function renderSolve(){
+  clearInterval(timerId);
+  remainingSec = problem.skill_time * 60;
+  const target = extractTargetLength(problem.question);
+  const passagesHtml = problem.passages.map(p =>
+    `<p class="passage"><span class="passage-label">(${escapeHtml(p.label)})</span>${escapeHtml(p.text)}</p>`
+  ).join('');
+
+  pageEl.innerHTML = `
+    <header class="topbar">
+      <button class="back-btn" id="backBtn">← 목록</button>
+      <div class="timer-wrap">
+        <span class="timer-num" id="timerNum"></span>
+        <div class="timerbar"><div class="timerbar-fill" id="timerFill"></div></div>
+      </div>
+    </header>
+    <main>
+      <span class="skill-tag">${escapeHtml(problem.skill_label)}</span>
+      ${passagesHtml}
+      ${renderChart(problem.chart)}
+      <div class="question-box">${escapeHtml(problem.question)}</div>
+      <textarea class="answer" id="answerBox" placeholder="여기에 답안을 작성하세요" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
+      <div class="counter"><span id="charCount">0자</span><span>목표 약 ${target}자</span></div>
+      <button class="primary-btn" id="submitBtn" disabled>제출하고 채점받기</button>
+      <p class="time-up-note" id="timeUpNote" style="display:none;">시간이 끝났어요 — 그래도 제출할 수 있어요</p>
+    </main>`;
+
+  document.getElementById('backBtn').onclick = () => { clearInterval(timerId); location.href = 'index.html'; };
+  const answerBox = document.getElementById('answerBox');
+  const charCount = document.getElementById('charCount');
+  const submitBtn = document.getElementById('submitBtn');
+  answerBox.addEventListener('input', () => {
+    const len = answerBox.value.length;
+    charCount.textContent = `${len}자`;
+    submitBtn.disabled = len < 10;
+  });
+  submitBtn.onclick = () => submitAnswer(answerBox.value);
+  startTimer();
+}
+
+function startTimer(){
+  const timerNum = document.getElementById('timerNum');
+  const timerFill = document.getElementById('timerFill');
+  const timeUpNote = document.getElementById('timeUpNote');
+  const total = remainingSec;
+  function tick(){
+    const m = Math.floor(Math.max(remainingSec,0)/60);
+    const s = Math.max(remainingSec,0)%60;
+    timerNum.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    timerFill.style.width = (Math.max(remainingSec,0)/total*100) + '%';
+    const low = remainingSec <= 60 && remainingSec > 0;
+    timerNum.classList.toggle('low', low || remainingSec<=0);
+    timerFill.classList.toggle('low', low || remainingSec<=0);
+    timerNum.classList.toggle('pulse', remainingSec<=0);
+    if(remainingSec <= 0){ timeUpNote.style.display = 'block'; clearInterval(timerId); return; }
+    remainingSec--;
+  }
+  tick();
+  timerId = setInterval(tick, 1000);
+}
+
+function renderLoading(msg){
+  pageEl.innerHTML = `<main class="loading"><div class="spinner"></div>${escapeHtml(msg)}</main>`;
+}
+function renderError(msg, retry){
+  pageEl.innerHTML = `<main class="error-box"><p>${escapeHtml(msg)}</p>
+    <button class="primary-btn" id="retryBtn" style="margin-top:0;">다시 시도</button></main>`;
+  document.getElementById('retryBtn').onclick = retry;
+}
+
+async function submitAnswer(answerText){
+  clearInterval(timerId);
+  renderLoading('답안을 채점하고 있어요...');
+  try{
+    const res = await fetch('/api/grade', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ access_token: session.access_token, problem, answer_text: answerText })
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || '채점 중 오류가 발생했어요.');
+    renderResult(data, answerText);
+  }catch(e){
+    console.error(e);
+    renderError(e.message || '채점 중 오류가 발생했어요.', () => submitAnswer(answerText));
+  }
+}
+
+function renderResult(result, answerText){
+  const score = Math.max(0, Math.min(5, Math.round(result.score)));
+  pageEl.innerHTML = `
+    <header class="topbar">
+      <button class="back-btn" id="backBtn">← 목록</button>
+      <span></span>
+    </header>
+    <main>
+      <div class="result-skill">${escapeHtml(problem.skill_label)} · ${escapeHtml(problem.topic)}</div>
+      <div class="score-wrap">
+        <div class="score-circle">${score}</div>
+        <span class="score-outof">/ 5</span>
+      </div>
+      <div class="feedback">${escapeHtml(result.feedback)}</div>
+      <details class="myanswer">
+        <summary>모범답안 보기</summary>
+        <p>${escapeHtml(result.modelAnswer || '')}</p>
+      </details>
+      <details class="myanswer">
+        <summary>내가 쓴 답안 다시 보기</summary>
+        <p>${escapeHtml(answerText)}</p>
+      </details>
+      <button class="secondary-btn" id="listBtn">목록으로</button>
+    </main>`;
+  document.getElementById('backBtn').onclick = () => { location.href = 'index.html'; };
+  document.getElementById('listBtn').onclick = () => { location.href = 'index.html'; };
+}
+
+async function init(){
+  session = await requireAuth();
+  if(!session) return;
+  const id = new URLSearchParams(location.search).get('id');
+  if(!id){ location.href = 'index.html'; return; }
+  renderLoading('문제를 불러오고 있어요...');
+  try{
+    const rows = await sbSelect('problems', `id=eq.${id}&select=*`, session.access_token);
+    if(!rows.length) throw new Error('문제를 찾을 수 없어요.');
+    problem = rows[0];
+    renderSolve();
+  }catch(e){
+    console.error(e);
+    renderError(e.message || '문제를 불러오는 중 오류가 발생했어요.', init);
+  }
+}
+init();
+</script>
+</body>
+</html>

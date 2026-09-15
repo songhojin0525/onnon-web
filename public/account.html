@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#EEF1F8">
+<title>ONNON - 내 계정</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;700&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page" id="page"><main class="loading"><div class="spinner"></div>불러오는 중...</main></div>
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script>
+const pageEl = document.getElementById('page');
+let session, profile;
+
+function localDateStr(d){
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function computeStats(history){
+  const count = history.length;
+  const avg = count ? Math.round((history.reduce((s,h)=>s+h.score,0)/count)*10)/10 : 0;
+  const daySet = new Set(history.map(h=>h.problem_date));
+  let streak = 0;
+  let cursor = new Date();
+  if(!daySet.has(localDateStr(cursor))) cursor.setDate(cursor.getDate()-1);
+  while(daySet.has(localDateStr(cursor))){ streak++; cursor.setDate(cursor.getDate()-1); }
+  return { count, avg, streak };
+}
+
+async function render(){
+  const history = await sbSelect('submissions', `user_id=eq.${session.user.id}&select=score,problem_date`, session.access_token);
+  const stats = computeStats(history);
+  const dday = profile.dday_date ? { label: profile.dday_label || '디데이', date: profile.dday_date } : null;
+
+  pageEl.innerHTML = `
+    <header class="topbar">
+      <button class="back-btn" id="backBtn">← 목록</button>
+      <span></span>
+    </header>
+    <main>
+      <div class="account-avatar">${profile.nickname ? escapeHtml(profile.nickname[0]) : personIconSvg()}</div>
+      <div class="account-name-row">
+        <input class="nickname-input" id="nicknameInput" value="${escapeHtml(profile.nickname||'')}" placeholder="이름을 입력하세요" maxlength="10">
+        <button class="save-link" id="saveNickBtn">저장</button>
+      </div>
+      <p class="account-joined">${escapeHtml(profile.joined||'')}부터 함께하는 중</p>
+      <div class="stat-grid">
+        <div class="stat-box"><span class="stat-num">${stats.count}</span><span class="stat-label">푼 문제</span></div>
+        <div class="stat-box"><span class="stat-num">${stats.avg}</span><span class="stat-label">평균 점수</span></div>
+        <div class="stat-box"><span class="stat-num">${stats.streak}</span><span class="stat-label">연속 일수</span></div>
+      </div>
+      <div class="dday-edit">
+        <div class="dday-edit-label">디데이${dday ? ` · ${escapeHtml(dday.label)} ${computeDdayLabel(dday.date)}` : ' 설정되지 않음'}</div>
+        <div class="dday-edit-row">
+          <input class="dday-label-input" id="ddayLabelInput" value="${escapeHtml(dday?.label || '수능')}" maxlength="12" placeholder="이름 (예: 수능)">
+          <input class="dday-date-input" id="ddayDateInput" type="date" value="${dday?.date || ''}">
+        </div>
+        <div class="dday-actions">
+          <button class="save-link" id="saveDdayBtn">저장</button>
+          ${dday ? `<button class="reset-link" id="clearDdayBtn">디데이 삭제</button>` : ''}
+        </div>
+      </div>
+      <button class="secondary-btn" id="logoutBtn" style="margin-top:30px;">로그아웃</button>
+    </main>`;
+
+  document.getElementById('backBtn').onclick = () => { location.href = 'index.html'; };
+  document.getElementById('logoutBtn').onclick = () => signOut();
+  document.getElementById('saveNickBtn').onclick = async () => {
+    const val = document.getElementById('nicknameInput').value.trim().slice(0,10);
+    profile = await sbUpsertOwn('profiles', { ...profile, nickname: val }, session.access_token);
+    render();
+  };
+  document.getElementById('saveDdayBtn').onclick = async () => {
+    const label = document.getElementById('ddayLabelInput').value.trim().slice(0,12) || '수능';
+    const date = document.getElementById('ddayDateInput').value;
+    if(!date) return;
+    profile = await sbUpsertOwn('profiles', { ...profile, dday_label: label, dday_date: date }, session.access_token);
+    render();
+  };
+  const clearDdayBtn = document.getElementById('clearDdayBtn');
+  if(clearDdayBtn) clearDdayBtn.onclick = async () => {
+    profile = await sbUpsertOwn('profiles', { ...profile, dday_label: null, dday_date: null }, session.access_token);
+    render();
+  };
+}
+
+async function init(){
+  session = await requireAuth();
+  if(!session) return;
+  try{
+    const rows = await sbSelect('profiles', `id=eq.${session.user.id}&select=*`, session.access_token);
+    profile = rows[0] || await sbUpsertOwn('profiles', { id: session.user.id, nickname:'', joined: localDateStrKST() }, session.access_token);
+    render();
+  }catch(e){
+    console.error(e);
+    pageEl.innerHTML = `<main class="error-box"><p>불러오는 중 오류가 발생했어요.</p>
+      <button class="primary-btn" onclick="location.reload()">다시 시도</button></main>`;
+  }
+}
+init();
+</script>
+</body>
+</html>

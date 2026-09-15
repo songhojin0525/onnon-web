@@ -1,0 +1,99 @@
+// Google Gemini API — Google 계정만 있으면 카드 등록 없이 무료로 쓸 수 있는 무료 티어 사용.
+// (Flash 계열 모델은 요청 빈도가 많지 않은 개인 프로젝트 규모에서 계속 무료입니다.)
+const GEMINI_MODEL = 'gemini-flash-latest';
+
+async function callGemini({ system, user, maxTokens }) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error('GEMINI_API_KEY 환경변수가 설정되어 있지 않습니다.');
+
+  const body = {
+    system_instruction: { parts: [{ text: system }] },
+    contents: [{ role: 'user', parts: [{ text: user }] }],
+    generationConfig: {
+      maxOutputTokens: maxTokens || 1500,
+      responseMimeType: 'application/json',
+    },
+  };
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`Gemini API 오류 (${res.status}): ${errText.slice(0, 300)}`);
+  }
+
+  const data = await res.json();
+  const candidate = data.candidates && data.candidates[0];
+  if (!candidate) throw new Error('Gemini API가 빈 응답을 반환했어요.');
+  if (candidate.finishReason === 'SAFETY') throw new Error('안전 정책에 의해 응답이 차단됐어요. 다시 시도해 주세요.');
+
+  const parts = (candidate.content && candidate.content.parts) || [];
+  return parts.map(p => p.text || '').join('');
+}
+
+function parseJsonLoose(text) {
+  let cleaned = String(text || '').replace(/```json/g, '').replace(/```/g, '').trim();
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  if (start !== -1 && end !== -1 && end > start) {
+    cleaned = cleaned.slice(start, end + 1);
+  }
+  return JSON.parse(cleaned);
+}
+
+async function generateOneProblem(skill, dateStr) {
+  const system = '당신은 성균관대학교·고려대학교 인문계열 논술 출제위원입니다. 두 학교의 실제 기출 논술문제 형식(고등학교 교육과정 과목과 자연스럽게 연계되는 소재, 설명문뿐 아니라 시·소설 등 문학 제시문도 활용하는 구성, 두 입장을 대비시키는 압축적인 문항 형태)을 참고해, 특정 대학의 실제 지문이나 문항 문장을 베끼지 않고 완전히 새로운 문제를 창작합니다. 응답은 오직 하나의 JSON 객체여야 하며, 그 외의 설명이나 마크다운 코드블록 표시는 절대 포함하지 마세요.';
+  const user = `아래 능력 딱 하나만을 정확히 평가하는 압축형 논술 문제 1개를 만들어 주세요.
+
+평가 능력: ${skill.desc}
+
+조건:
+- 제시문은 2개(가, 나)로 구성하고, 하나는 쟁점에 대한 옹호·지지 관점, 다른 하나는 비판·우려 관점을 담으세요. 각 제시문은 2~3문장, 90자 이내로 압축하세요.
+- 제시문 소재는 고등학교 교육과정 과목(문학, 국어, 통합사회, 생활과 윤리, 윤리와 사상, 사회·문화, 경제, 세계사, 세계지리, 통합과학 등) 중 하나와 자연스럽게 연결되게 구성하세요. 대부분은 설명문·논설문 형식으로 쓰되, 가끔은 시나 소설의 한 장면처럼 문학적 정서가 담긴 제시문(이때도 창작)을 섞어 다양성을 주세요.
+- question은 위 능력 하나만 요구하도록 설계하고, 문항 끝에 목표 분량을 "OOO자(±50자) 내외로 서술하시오" 형태로 명시하세요(150~250자 사이).
+- ${skill.id === 'chart' ? 'chart 필드를 반드시 포함하고, 5~6개의 구체적인 수치를 넣으세요.' : '문제 성격상 자연스러우면 chart를 포함하고, 아니면 null로 두세요.'}
+- 정의, 세대, 기술, 공동체, 시장, 환경, 언어, 공정성 등 실제 사회 이슈 중 하나를 소재로 삼되 진부하지 않게 구성하세요. (참고 날짜: ${dateStr}, 요소: ${skill.id})
+- topic은 10자 내외의 짧은 제목으로 작성하세요.
+
+다음 JSON 형식으로만 응답하세요:
+{"topic":"...", "passages":[{"label":"가","text":"..."},{"label":"나","text":"..."}], "chart": {"title":"...","unit":"...","categories":["..."],"series":[{"name":"...","values":[0,0]}]} 또는 null, "question":"..."}`;
+
+  const raw = await callGemini({ system, user, maxTokens: 1800 });
+  const parsed = parseJsonLoose(raw);
+  if (!parsed.passages || parsed.passages.length < 2 || !parsed.question) {
+    throw new Error('생성된 문제 형식이 올바르지 않습니다.');
+  }
+  return parsed;
+}
+
+async function gradeAnswer({ skillDesc, passages, chart, question, answerText }) {
+  const system = '당신은 성균관대·고려대 인문논술 채점관입니다. 이 문제는 오직 한 가지 능력만 평가합니다. 문장력, 맞춤법, 전체 구성 등 그 외의 요소는 절대 채점에 반영하지 마세요. 채점과 별개로 학생이 비교해볼 수 있도록 이 문제에 대한 모범답안도 직접 작성하세요. 응답은 JSON 객체 하나뿐이어야 하며 다른 텍스트를 포함하지 마세요.';
+  const chartStr = chart ? `\n[도표] ${chart.title} (단위:${chart.unit || ''}) — ${JSON.stringify(chart.series)}` : '';
+  const user = `[평가 능력]
+${skillDesc}
+
+[제시문]
+${passages.map(p => `(${p.label}) ${p.text}`).join('\n')}${chartStr}
+
+[문제]
+${question}
+
+[학생 답안]
+${answerText}
+위 평가 능력 기준으로만 5점 만점으로 채점하고, 한국어로 3~4문장 피드백을 작성하세요. 잘한 점과 놓친 점을 구체적으로 지적하세요. 그리고 문항이 요구한 목표 분량에 맞춰, 평가 능력을 확실히 보여주는 모범답안을 직접 작성하세요.
+다음 JSON 형식으로만 응답하세요:
+{"score": 0, "feedback": "...", "modelAnswer": "..."}`;
+
+  const raw = await callGemini({ system, user, maxTokens: 1400 });
+  return parseJsonLoose(raw);
+}
+
+module.exports = { callGemini, parseJsonLoose, generateOneProblem, gradeAnswer };
