@@ -31,10 +31,11 @@ async function callGemini({ system, user, maxTokens }) {
 
   const data = await res.json();
   const block = data.content && data.content[0];
-  if (!block || !block.text) throw new Error('Claude API가 빈 응답을 반환했어요.');
+  if (!block || !block.text) {
+    throw new Error('Claude API가 빈 응답을 반환했어요. 상세: ' + JSON.stringify(data).slice(0, 500));
+  }
 
   return block.text;
-}
 
 function parseJsonLoose(text) {
   let cleaned = String(text || '').replace(/```json/g, '').replace(/```/g, '').trim();
