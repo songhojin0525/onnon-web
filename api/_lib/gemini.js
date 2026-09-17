@@ -8,10 +8,9 @@ async function callGemini({ system, user, maxTokens }) {
   const body = {
     model: CLAUDE_MODEL,
     max_tokens: maxTokens || 1500,
-    system: system,
+    system: system + '\n\n반드시 JSON 객체 하나만 출력하세요. 설명, 마크다운 코드블록(```), 그 외 텍스트를 절대 포함하지 마세요. 응답은 { 로 시작해서 } 로 끝나야 합니다.',
     messages: [
       { role: 'user', content: user },
-      { role: 'assistant', content: '{' }, // JSON으로 강제 시작
     ],
   };
 
@@ -24,6 +23,18 @@ async function callGemini({ system, user, maxTokens }) {
     },
     body: JSON.stringify(body),
   });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`Claude API 오류 (${res.status}): ${errText.slice(0, 300)}`);
+  }
+
+  const data = await res.json();
+  const block = data.content && data.content[0];
+  if (!block || !block.text) throw new Error('Claude API가 빈 응답을 반환했어요.');
+
+  return block.text;
+}
 
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
