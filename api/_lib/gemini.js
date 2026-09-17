@@ -36,19 +36,6 @@ async function callGemini({ system, user, maxTokens }) {
   return block.text;
 }
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    throw new Error(`Claude API 오류 (${res.status}): ${errText.slice(0, 300)}`);
-  }
-
-  const data = await res.json();
-  const block = data.content && data.content[0];
-  if (!block || !block.text) throw new Error('Claude API가 빈 응답을 반환했어요.');
-
-  // assistant를 '{'로 시작시켰으니 앞에 다시 붙여줌
-  return '{' + block.text;
-}
-
 function parseJsonLoose(text) {
   let cleaned = String(text || '').replace(/```json/g, '').replace(/```/g, '').trim();
   const start = cleaned.indexOf('{');
