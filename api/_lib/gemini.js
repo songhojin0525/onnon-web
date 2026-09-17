@@ -26,7 +26,7 @@ async function callGemini({ system, user, maxTokens }) {
 
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
-    throw new Error(`Claude API 오류 (${res.status}): ${errText.slice(0, 300)}`);
+    throw new Error(`Claude API 오류 (${res.status}): ${errText.slice(0, 500)}`);
   }
 
   const data = await res.json();
@@ -36,6 +36,7 @@ async function callGemini({ system, user, maxTokens }) {
   }
 
   return block.text;
+}
 
 function parseJsonLoose(text) {
   let cleaned = String(text || '').replace(/```json/g, '').replace(/```/g, '').trim();
