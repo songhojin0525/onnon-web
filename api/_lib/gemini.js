@@ -1,42 +1,41 @@
-// Google Gemini API — Google 계정만 있으면 카드 등록 없이 무료로 쓸 수 있는 무료 티어 사용.
-// (Flash 계열 모델은 요청 빈도가 많지 않은 개인 프로젝트 규모에서 계속 무료입니다.)
-const GEMINI_MODEL = 'gemini-flash-latest';
+// Anthropic Claude API — Sonnet 5 사용
+const CLAUDE_MODEL = 'claude-sonnet-5';
 
 async function callGemini({ system, user, maxTokens }) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error('GEMINI_API_KEY 환경변수가 설정되어 있지 않습니다.');
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY 환경변수가 설정되어 있지 않습니다.');
 
   const body = {
-    system_instruction: { parts: [{ text: system }] },
-    contents: [{ role: 'user', parts: [{ text: user }] }],
-    generationConfig: {
-      maxOutputTokens: maxTokens || 1500,
-      responseMimeType: 'application/json',
-    },
+    model: CLAUDE_MODEL,
+    max_tokens: maxTokens || 1500,
+    system: system,
+    messages: [
+      { role: 'user', content: user },
+      { role: 'assistant', content: '{' }, // JSON으로 강제 시작
+    ],
   };
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
-  const res = await fetch(url, {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-goog-api-key': apiKey,
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify(body),
   });
 
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
-    throw new Error(`Gemini API 오류 (${res.status}): ${errText.slice(0, 300)}`);
+    throw new Error(`Claude API 오류 (${res.status}): ${errText.slice(0, 300)}`);
   }
 
   const data = await res.json();
-  const candidate = data.candidates && data.candidates[0];
-  if (!candidate) throw new Error('Gemini API가 빈 응답을 반환했어요.');
-  if (candidate.finishReason === 'SAFETY') throw new Error('안전 정책에 의해 응답이 차단됐어요. 다시 시도해 주세요.');
+  const block = data.content && data.content[0];
+  if (!block || !block.text) throw new Error('Claude API가 빈 응답을 반환했어요.');
 
-  const parts = (candidate.content && candidate.content.parts) || [];
-  return parts.map(p => p.text || '').join('');
+  // assistant를 '{'로 시작시켰으니 앞에 다시 붙여줌
+  return '{' + block.text;
 }
 
 function parseJsonLoose(text) {
