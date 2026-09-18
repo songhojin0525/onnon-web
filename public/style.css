@@ -227,3 +227,43 @@ details.myanswer p{font-family:var(--serif); font-size:15px; line-height:1.7; ma
 }
 .text-input:focus{outline:none; border-color:var(--accent);}
 .auth-msg{font-size:13.5px; color:var(--warn); margin:-6px 0 14px; min-height:1em;}
+.section-title {
+  margin: 28px 0 12px;
+  font-size: 15px;
+  font-weight: 700;
+}
+.empty-note {
+  color: #8a8f9c;
+  font-size: 13px;
+  padding: 8px 0;
+}
+.chart-bar-fill.weak {
+  background: #e5484d;
+}
+.leaderboard-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.leaderboard-row {
+  display: grid;
+  grid-template-columns: 24px 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f5f6fa;
+  font-size: 13px;
+}
+.leaderboard-row.mine {
+  background: #e8ecff;
+  font-weight: 700;
+}
+.leaderboard-rank {
+  font-weight: 700;
+  color: #8a8f9c;
+}
+.leaderboard-solved, .leaderboard-score {
+  font-variant-numeric: tabular-nums;
+  color: #555;
+}
