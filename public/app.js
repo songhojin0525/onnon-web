@@ -140,3 +140,17 @@ async function sbUpsertOwn(table, row, accessToken){
   const data = await res.json();
   return data[0];
 }
+
+// Supabase RPC 호출 (예: 리더보드)
+async function sbRpc(fnName, accessToken){
+  const res = await fetch(`${SB_URL}/rest/v1/rpc/${fnName}`, {
+    method:'POST',
+    headers:{
+      apikey: SB_ANON, Authorization:`Bearer ${accessToken}`,
+      'Content-Type':'application/json'
+    },
+    body: JSON.stringify({})
+  });
+  if(!res.ok){ const t = await res.text(); throw new Error(`${fnName} 호출 실패: ${t}`); }
+  return res.json();
+}
