@@ -207,6 +207,11 @@ details.myanswer p{font-family:var(--serif); font-size:15px; line-height:1.7; ma
 }
 .dday-actions{display:flex; align-items:center; gap:14px;}
 
+#charCount.over {
+  color: #e5484d;
+  font-weight: 700;
+}
+
 /* 로그인 / 관리자 페이지 전용 */
 .auth-wrap{padding:56px 24px;}
 .auth-tabs{display:flex; gap:0; margin-bottom:28px; border-bottom:1px solid var(--line);}
