@@ -1,12 +1,13 @@
-// Anthropic Claude API — Sonnet 5 사용
-const CLAUDE_MODEL = 'claude-sonnet-5';
+// Anthropic Claude API — 문제 생성: Opus 5 / 채점: Sonnet 5
+const MODEL_GENERATE = 'claude-opus-5';
+const MODEL_GRADE = 'claude-sonnet-5';
 
-async function callGemini({ system, user, maxTokens }) {
+async function callGemini({ system, user, maxTokens, model }) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY 환경변수가 설정되어 있지 않습니다.');
 
   const body = {
-    model: CLAUDE_MODEL,
+    model: model || MODEL_GRADE,
     max_tokens: maxTokens || 2000,
     thinking: { type: 'disabled' },
     system: system + '\n\n반드시 JSON 객체 하나만 출력하세요. 설명, 마크다운 코드블록(```), 그 외 텍스트를 절대 포함하지 마세요. 응답은 { 로 시작해서 } 로 끝나야 합니다. 문자열 안에 인용부호가 필요하면 큰따옴표(") 대신 「 」 또는 작은따옴표(\')를 사용하세요. 숫자를 쓸 때 천단위 구분 콤마(예: 1,234)를 절대 사용하지 말고 순수 숫자(예: 1234)만 쓰세요. 배열이나 객체의 마지막 요소 뒤에 불필요한 콤마를 넣지 마세요.',
@@ -101,7 +102,7 @@ async function generateOneProblem(skill, dateStr) {
 다음 JSON 형식으로만 응답하세요:
 {"topic":"...", "passages":[{"label":"가","text":"..."},{"label":"나","text":"..."}], "chart": {"title":"...","unit":"...","categories":["..."],"series":[{"name":"...","values":[0,0]}]} 또는 null, "question":"..."}`;
 
-  const raw = await callGemini({ system, user, maxTokens: 2200 });
+  const raw = await callGemini({ system, user, maxTokens: 2200, model: MODEL_GENERATE });
   const parsed = parseJsonLoose(raw);
   if (!parsed.passages || parsed.passages.length < 2 || !parsed.question) {
     throw new Error('생성된 문제 형식이 올바르지 않습니다.');
@@ -134,7 +135,7 @@ ${answerText}
 다음 JSON 형식으로만 응답하세요:
 {"score": 0, "feedback": "...", "modelAnswer": "..."}`;
 
-  const raw = await callGemini({ system, user, maxTokens: 1600 });
+  const raw = await callGemini({ system, user, maxTokens: 1600, model: MODEL_GRADE });
   return parseJsonLoose(raw);
 }
 
