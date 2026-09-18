@@ -8,6 +8,7 @@ async function callGemini({ system, user, maxTokens }) {
   const body = {
     model: CLAUDE_MODEL,
     max_tokens: maxTokens || 2000,
+    thinking: { type: 'disabled' },
     system: system + '\n\n반드시 JSON 객체 하나만 출력하세요. 설명, 마크다운 코드블록(```), 그 외 텍스트를 절대 포함하지 마세요. 응답은 { 로 시작해서 } 로 끝나야 합니다. 문자열 안에 인용부호가 필요하면 큰따옴표(") 대신 「 」 또는 작은따옴표(\')를 사용하세요. 숫자를 쓸 때 천단위 구분 콤마(예: 1,234)를 절대 사용하지 말고 순수 숫자(예: 1234)만 쓰세요. 배열이나 객체의 마지막 요소 뒤에 불필요한 콤마를 넣지 마세요.',
     messages: [
       { role: 'user', content: user },
@@ -55,23 +56,19 @@ function parseJsonLoose(text) {
     catch (e) { return { ok: false, err: e }; }
   }
 
-  // 1차 시도
   let result = tryParse(cleaned);
   if (result.ok) return result.value;
 
-  // 2차: 스마트따옴표 치환
   let repaired = cleaned
     .replace(/[\u201C\u201D]/g, "'")
     .replace(/[\u2018\u2019]/g, "'");
   result = tryParse(repaired);
   if (result.ok) return result.value;
 
-  // 3차: 숫자 안의 천단위 콤마 제거 (예: 1,234 -> 1234)
   repaired = repaired.replace(/(\d),(\d{3})/g, '$1$2');
   result = tryParse(repaired);
   if (result.ok) return result.value;
 
-  // 4차: 배열/객체 끝의 trailing comma 제거
   repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
   result = tryParse(repaired);
   if (result.ok) return result.value;
