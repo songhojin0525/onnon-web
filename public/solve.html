@@ -20,11 +20,16 @@ let session, problem, timerId, remainingSec, isSolving = false;
 
 function renderChart(chart){
   if(!chart) return '';
-  const allValues = chart.series.flatMap(s=>s.values||[]);
+  function toNum(v){
+    const n = Number(String(v).replace(/,/g, ''));
+    return isNaN(n) ? 0 : n;
+  }
+  const allValues = chart.series.flatMap(s=>(s.values||[]).map(toNum));
   const max = Math.max(...allValues, 1);
   const rows = chart.categories.map((cat,i)=>{
     const bars = chart.series.map(s=>{
-      const v = (s.values||[])[i] ?? 0;
+      const rawV = (s.values||[])[i] ?? 0;
+      const v = toNum(rawV);
       const pct = Math.round((v/max)*100);
       return `<div class="chart-bar-row">
         <span class="chart-bar-series">${escapeHtml(s.name)}</span>
