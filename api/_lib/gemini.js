@@ -76,7 +76,6 @@ async function generateOneProblem(skill, dateStr) {
   if (!parsed.passages || parsed.passages.length < 2 || !parsed.question) {
     throw new Error('생성된 문제 형식이 올바르지 않습니다.');
   }
-  // 도표 데이터 정합성 검증
   if (parsed.chart) {
     const catLen = (parsed.chart.categories || []).length;
     const seriesOk = (parsed.chart.series || []).every(s => (s.values || []).length === catLen);
