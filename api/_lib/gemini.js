@@ -30,12 +30,13 @@ async function callGemini({ system, user, maxTokens }) {
   }
 
   const data = await res.json();
-  const block = data.content && data.content[0];
-  if (!block || !block.text) {
+  const blocks = data.content || [];
+  const textBlock = blocks.find(b => b.type === 'text');
+  if (!textBlock || !textBlock.text) {
     throw new Error('Claude API가 빈 응답을 반환했어요. 상세: ' + JSON.stringify(data).slice(0, 500));
   }
 
-  return block.text;
+  return textBlock.text;
 }
 
 function parseJsonLoose(text) {
