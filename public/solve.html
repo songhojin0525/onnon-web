@@ -37,7 +37,6 @@ function renderChart(chart){
   return `<div class="chart-block"><div class="chart-title">${escapeHtml(chart.title)}</div>${rows}</div>`;
 }
 
-// 페이지 이탈 방지
 function beforeUnloadHandler(e){
   e.preventDefault();
   e.returnValue = '';
@@ -51,10 +50,28 @@ function exitSolvingMode(){
   isSolving = false;
   window.removeEventListener('beforeunload', beforeUnloadHandler);
 }
-function confirmLeave(navigateFn){
+async function submitZeroScore(){
+  try{
+    await fetch('/api/grade', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        access_token: session.access_token,
+        problem,
+        answer_text: '',
+        force_zero: true
+      })
+    });
+  }catch(e){ console.error(e); }
+}
+async function confirmLeave(navigateFn){
   if(!isSolving){ navigateFn(); return; }
-  const ok = confirm('지금 나가면 이 문제는 오답 처리됩니다. 정말 나가시겠어요?');
-  if(ok){ exitSolvingMode(); navigateFn(); }
+  const ok = confirm('지금 나가면 이 문제는 0점으로 오답 처리됩니다. 정말 나가시겠어요?');
+  if(!ok) return;
+  exitSolvingMode();
+  clearInterval(timerId);
+  await submitZeroScore();
+  navigateFn();
 }
 
 function renderSolve(){
@@ -85,7 +102,7 @@ function renderSolve(){
     </main>`;
 
   document.getElementById('backBtn').onclick = () => {
-    confirmLeave(() => { clearInterval(timerId); location.href = 'index.html'; });
+    confirmLeave(() => { location.href = 'index.html'; });
   };
   const answerBox = document.getElementById('answerBox');
   const charCount = document.getElementById('charCount');
