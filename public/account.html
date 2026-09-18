@@ -33,10 +33,54 @@ function computeStats(history){
   return { count, avg, streak };
 }
 
+// 유형별 평균 점수 계산 (5점 만점 기준, 낮을수록 취약)
+function computeSkillStats(history){
+  const map = {};
+  history.forEach(h => {
+    if(!map[h.skill_label]) map[h.skill_label] = { sum:0, count:0 };
+    map[h.skill_label].sum += h.score;
+    map[h.skill_label].count += 1;
+  });
+  return Object.entries(map)
+    .map(([label, v]) => ({ label, avg: Math.round((v.sum/v.count)*10)/10, count: v.count }))
+    .sort((a,b) => a.avg - b.avg); // 낮은 평균(취약한) 순
+}
+
+function renderSkillChart(skillStats){
+  if(!skillStats.length) return '<p class="empty-note">아직 풀이 기록이 없어요.</p>';
+  const rows = skillStats.map(s => {
+    const pct = Math.round((s.avg/5)*100);
+    const weak = s.avg < 3;
+    return `<div class="chart-bar-row">
+      <span class="chart-bar-series">${escapeHtml(s.label)}</span>
+      <div class="chart-bar-track"><div class="chart-bar-fill${weak?' weak':''}" style="width:${pct}%"></div></div>
+      <span class="chart-bar-value">${s.avg} / 5</span>
+    </div>`;
+  }).join('');
+  return `<div class="chart-block">${rows}</div>`;
+}
+
+function renderLeaderboard(rows, myNickname){
+  if(!rows || !rows.length) return '<p class="empty-note">아직 리더보드 데이터가 없어요.</p>';
+  const items = rows.map((r,i) => {
+    const mine = r.nickname === myNickname && myNickname;
+    return `<div class="leaderboard-row${mine?' mine':''}">
+      <span class="leaderboard-rank">${i+1}</span>
+      <span class="leaderboard-nick">${escapeHtml(r.nickname)}</span>
+      <span class="leaderboard-solved">${r.solved_count}문제</span>
+      <span class="leaderboard-score">${r.avg_score}점</span>
+    </div>`;
+  }).join('');
+  return `<div class="leaderboard-list">${items}</div>`;
+}
+
 async function render(){
-  const history = await sbSelect('submissions', `user_id=eq.${session.user.id}&select=score,problem_date`, session.access_token);
+  const history = await sbSelect('submissions', `user_id=eq.${session.user.id}&select=score,problem_date,skill_label`, session.access_token);
   const stats = computeStats(history);
+  const skillStats = computeSkillStats(history);
   const dday = profile.dday_date ? { label: profile.dday_label || '디데이', date: profile.dday_date } : null;
+
+  let leaderboardHtml = '<p class="empty-note">불러오는 중...</p>';
 
   pageEl.innerHTML = `
     <header class="topbar">
@@ -55,6 +99,13 @@ async function render(){
         <div class="stat-box"><span class="stat-num">${stats.avg}</span><span class="stat-label">평균 점수</span></div>
         <div class="stat-box"><span class="stat-num">${stats.streak}</span><span class="stat-label">연속 일수</span></div>
       </div>
+
+      <h3 class="section-title">유형별 평균 점수</h3>
+      ${renderSkillChart(skillStats)}
+
+      <h3 class="section-title">리더보드</h3>
+      <div id="leaderboardBox">${leaderboardHtml}</div>
+
       <div class="dday-edit">
         <div class="dday-edit-label">디데이${dday ? ` · ${escapeHtml(dday.label)} ${computeDdayLabel(dday.date)}` : ' 설정되지 않음'}</div>
         <div class="dday-edit-row">
@@ -88,6 +139,15 @@ async function render(){
     profile = await sbUpsertOwn('profiles', { ...profile, dday_label: null, dday_date: null }, session.access_token);
     render();
   };
+
+  // 리더보드는 별도로 비동기 로드 (실패해도 나머지 화면엔 영향 없게)
+  try{
+    const rows = await sbRpc('get_leaderboard', session.access_token);
+    document.getElementById('leaderboardBox').innerHTML = renderLeaderboard(rows, profile.nickname);
+  }catch(e){
+    console.error(e);
+    document.getElementById('leaderboardBox').innerHTML = '<p class="empty-note">리더보드를 불러오지 못했어요.</p>';
+  }
 }
 
 async function init(){
