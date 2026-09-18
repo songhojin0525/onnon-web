@@ -78,7 +78,8 @@ function parseJsonLoose(text) {
   throw new Error('AI 응답이 올바른 JSON 형식이 아닙니다: ' + result.err.message + ' / 원문 일부: ' + around);
 }
 
-async function generateOneProblem(skill, dateStr) {
+// 기존(비교/도표/개념정의 등) 압축형 문제 생성
+async function generateShortProblem(skill, dateStr) {
   const system = '당신은 성균관대학교·고려대학교 인문계열 논술 출제위원입니다. 고등학교 3학년 수험생이 매일 꾸준히 연습할 수 있는 적정 난이도의 논술 문제를 출제합니다. 두 학교의 실제 기출 논술문제 형식(고등학교 교육과정 과목과 자연스럽게 연계되는 소재, 설명문뿐 아니라 시·소설 등 문학 제시문도 활용하는 구성, 두 입장을 대비시키는 압축적인 문항 형태)을 참고해, 특정 대학의 실제 지문이나 문항 문장을 베끼지 않고 완전히 새로운 문제를 창작합니다. 응답은 오직 하나의 JSON 객체여야 하며, 그 외의 설명이나 마크다운 코드블록 표시는 절대 포함하지 마세요. 제시문이나 문항 안에서 인용부호가 필요하면 큰따옴표(") 대신 「 」 나 작은따옴표(\')를 사용하세요. 숫자는 천단위 콤마 없이 순수 숫자로만 쓰세요.';
   const user = `아래 능력 딱 하나만을 정확히 평가하는 압축형 논술 문제 1개를 만들어 주세요.
 
@@ -117,8 +118,45 @@ async function generateOneProblem(skill, dateStr) {
   return parsed;
 }
 
+// 수능 국어 스타일 — 장문 지문 + <보기> + 2단 질문
+async function generateLongReadingProblem(skill, dateStr) {
+  const system = '당신은 수능 국어 비문학(독서) 영역과 대학 논술을 결합한 문제를 출제하는 전문가입니다. 수능 국어처럼 하나의 긴 지문과 그 지문을 해석·적용하는 데 참고할 <보기> 자료를 만들고, 두 단계 질문(① 지문의 핵심 주장·쟁점 파악 ② <보기>를 활용한 해석·적용 서술)으로 구성된 문제를 창작합니다. 실제 수능이나 특정 대학의 기출 지문을 베끼지 말고 완전히 새로운 지문을 창작하세요. 응답은 오직 하나의 JSON 객체여야 하며, 그 외의 설명이나 마크다운 코드블록 표시는 절대 포함하지 마세요. 지문이나 문항 안에서 인용부호가 필요하면 큰따옴표(") 대신 「 」 나 작은따옴표(\')를 사용하세요. 숫자는 천단위 콤마 없이 순수 숫자로만 쓰세요.';
+  const user = `수능 국어 비문학 스타일의 장문 독해 문제 1개를 만들어 주세요.
+
+평가 능력: ${skill.desc}
+
+조건:
+- 지문(label: "지문")은 800~1200자 분량으로, 하나의 명확한 핵심 주장 또는 쟁점을 담은 설명문·논설문 형태로 작성하세요. 고등학교 교육과정 과목(통합사회, 생활과 윤리, 윤리와 사상, 사회·문화, 경제, 세계사, 세계지리, 통합과학, 문학, 국어 등) 중 하나와 자연스럽게 연결되는 소재를 쓰세요. 문단을 2~4개로 구성해 논지가 전개되는 흐름이 드러나게 하세요.
+- <보기>(label: "보기")는 200~350자 분량으로, 지문을 해석하거나 적용하는 데 필요한 추가 자료(다른 관점, 구체적 사례, 관련 개념 설명, 통계나 일화 등)를 담으세요. 지문과 직접 연결되어야 합니다.
+- 난이도는 고3 수험생이 매일 꾸준히 풀며 독해력을 기르기에 적당한 수준으로 하세요. 지나치게 난해한 전문 용어나 여러 겹의 전제를 숨기지 말고, 차분히 읽으면 정확히 파악할 수 있는 수준으로 설계하세요.
+- question 필드에는 반드시 아래 두 문항을 번호를 붙여 순서대로 포함하세요:
+  1번 문항: 지문의 핵심 주장(또는 쟁점)이 무엇이며 그 내용이 무엇인지 정리하는 문항. "100자 내외로 서술하시오" 형태로 분량을 명시하세요.
+  2번 문항: <보기>를 활용하여 지문의 내용을 해석하거나 새로운 상황에 적용하도록 요구하는 문항. "200자 내외로 서술하시오" 형태로 분량을 명시하세요.
+  두 문항 사이는 줄바꿈(\\n)으로 구분하고, 마지막에 "(총 300자 내외로 답하시오)"라는 문구를 추가하세요.
+- ${skill.id === 'chart' ? 'chart는 null로 두세요.' : 'chart는 null로 두세요.'}
+- topic은 10자 내외의 짧은 제목으로 작성하세요.
+- 지문, 보기, 문항 어디에도 큰따옴표(")를 사용하지 마세요. 인용이 필요하면 「 」 또는 작은따옴표(')를 사용하세요.
+
+다음 JSON 형식으로만 응답하세요:
+{"topic":"...", "passages":[{"label":"지문","text":"..."},{"label":"보기","text":"..."}], "chart": null, "question":"..."}`;
+
+  const raw = await callGemini({ system, user, maxTokens: 3000, model: MODEL_GENERATE });
+  const parsed = parseJsonLoose(raw);
+  if (!parsed.passages || parsed.passages.length < 2 || !parsed.question) {
+    throw new Error('생성된 장문 독해 문제 형식이 올바르지 않습니다.');
+  }
+  return parsed;
+}
+
+async function generateOneProblem(skill, dateStr) {
+  if (skill.id === 'long_reading') {
+    return generateLongReadingProblem(skill, dateStr);
+  }
+  return generateShortProblem(skill, dateStr);
+}
+
 async function gradeAnswer({ skillDesc, passages, chart, question, answerText }) {
-  const system = '당신은 성균관대·고려대 인문논술 채점관입니다. 이 문제는 오직 한 가지 능력만 평가합니다. 문장력, 맞춤법, 전체 구성 등 그 외의 요소는 절대 채점에 반영하지 마세요. 채점과 별개로 학생이 비교해볼 수 있도록 이 문제에 대한 모범답안도 직접 작성하세요. 응답은 JSON 객체 하나뿐이어야 하며 다른 텍스트를 포함하지 마세요. 피드백이나 모범답안 안에서 인용부호가 필요하면 큰따옴표(") 대신 「 」 나 작은따옴표(\')를 사용하세요.';
+  const system = '당신은 성균관대·고려대 인문논술 및 수능 국어 채점관입니다. 문제가 요구하는 능력만 채점하고, 문항이 여러 개로 구성된 경우 각 문항의 요구사항을 모두 충족했는지 확인하세요. 문장력, 맞춤법, 전체 구성 등 그 외의 요소는 절대 채점에 반영하지 마세요. 채점과 별개로 학생이 비교해볼 수 있도록 이 문제에 대한 모범답안도 직접 작성하세요. 응답은 JSON 객체 하나뿐이어야 하며 다른 텍스트를 포함하지 마세요. 피드백이나 모범답안 안에서 인용부호가 필요하면 큰따옴표(") 대신 「 」 나 작은따옴표(\')를 사용하세요.';
   const chartStr = chart ? `\n[도표] ${chart.title} (단위:${chart.unit || ''}) — ${JSON.stringify(chart.series)}` : '';
   const user = `[평가 능력]
 ${skillDesc}
@@ -131,11 +169,11 @@ ${question}
 
 [학생 답안]
 ${answerText}
-위 평가 능력 기준으로만 5점 만점으로 채점하고, 한국어로 3~4문장 피드백을 작성하세요. 잘한 점과 놓친 점을 구체적으로 지적하세요. 그리고 문항이 요구한 목표 분량에 맞춰, 평가 능력을 확실히 보여주는 모범답안을 직접 작성하세요. 큰따옴표(")는 절대 쓰지 마세요.
+위 평가 능력 기준으로만 5점 만점으로 채점하고, 한국어로 3~4문장 피드백을 작성하세요. 문항이 여러 개면 각 문항별로 잘한 점과 놓친 점을 구체적으로 지적하세요. 그리고 문항이 요구한 목표 분량에 맞춰, 평가 능력을 확실히 보여주는 모범답안을 직접 작성하세요. 문항이 여러 개면 모범답안도 각 문항에 대응해 구성하세요. 큰따옴표(")는 절대 쓰지 마세요.
 다음 JSON 형식으로만 응답하세요:
 {"score": 0, "feedback": "...", "modelAnswer": "..."}`;
 
-  const raw = await callGemini({ system, user, maxTokens: 1600, model: MODEL_GRADE });
+  const raw = await callGemini({ system, user, maxTokens: 1800, model: MODEL_GRADE });
   return parseJsonLoose(raw);
 }
 
